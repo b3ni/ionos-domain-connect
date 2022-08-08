@@ -1,0 +1,29 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  DOCKER_USER: ${{secrets.DOCKERHUB_USERNAME}}
+  DOCKER_PASSWORD: ${{secrets.DOCKERHUB_PASSWORD}}
+  REPO_NAME: ionos-domain-connect
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: docker login
+      run:
+        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+    - name: Get current date
+      id: date
+      run: echo "::set-output name=date::$(date +'%Y%m%d-%M%S')"
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag $DOCKER_USER/$REPO_NAME:${{ steps.date.outputs.date }}
+    - name: Docker Push
+      run: docker push $DOCKER_USER/$REPO_NAME:${{ steps.date.outputs.date }}
