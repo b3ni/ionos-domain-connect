@@ -12,5 +12,11 @@ def train_model():
     os.system("domain-connect-dyndns --config /config.json update --all")
 
 
-print("[%s] Start updater ..." % datetime.now())
-scheduler.start()
+try:
+    print("[%s] Starting updater ..." % datetime.now())
+    scheduler.start()
+except (KeyboardInterrupt, SystemExit):
+    print("[%s] Stop updater ..." % datetime.now())
+    scheduler.shutdown()
+    print("[%s] Exit ..." % datetime.now())
+    exit(0)
