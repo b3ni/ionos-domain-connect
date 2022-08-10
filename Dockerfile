@@ -10,4 +10,4 @@ VOLUME /config.json
 
 COPY ./src /src
 
-ENTRYPOINT [ "python", "-u", "/src/main.py" ]
+CMD [ "python", "-u", "/src/main.py" ]
