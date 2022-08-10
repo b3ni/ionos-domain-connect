@@ -32,3 +32,5 @@ Send notifications
 ## License
 
 MIT License
+
+See LICENSE for details.
