@@ -22,7 +22,10 @@ services:
 ## Setup a domain to updater
 
 ```
-docker run -it --rm -v $(pwd)/config.json:/config.json b3ni/ionos-domain-connect:latest /usr/local/bin/domain-connect-dyndns --config /config.json setup --domain <my-domain.com>
+docker run -it --rm -v $(pwd)/config.json:/config.json b3ni/ionos-domain-connect:latest \
+    /usr/local/bin/domain-connect-dyndns \
+    --config /config.json setup \
+    --domain <my-domain.com>
 ```
 
 ## TODO
