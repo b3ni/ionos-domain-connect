@@ -1,0 +1,2 @@
+APScheduler==3.9.1
+domain-connect-dyndns==0.0.9
