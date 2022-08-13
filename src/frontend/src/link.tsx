@@ -3,20 +3,23 @@ import { useRouter } from "next/router";
 import NextLink from "next/link";
 import MuiLink from "@mui/material/Link";
 import { styled } from "@mui/material/styles";
-import { forwardRef, LegacyRef, Ref } from "react";
+import { forwardRef, LegacyRef, Ref, RefAttributes } from "react";
 import { UrlObject } from "url";
 
 // Add support for the sx prop for consistency with the other branches.
 const Anchor = styled("a")({});
 
-interface NextLinkComposedProps {
-  to: string | UrlObject;
+interface SharedProps {
   linkAs?: UrlObject;
+  locale?: string | false;
+  prefetch?: boolean;
   replace?: boolean;
   scroll?: boolean;
   shallow?: boolean;
-  prefetch?: boolean;
-  locale?: string | false;
+}
+
+interface NextLinkComposedProps extends SharedProps {
+  to: string | UrlObject;
 }
 
 export const NextLinkComposed = forwardRef(function NextLinkComposed(
@@ -42,7 +45,7 @@ export const NextLinkComposed = forwardRef(function NextLinkComposed(
   );
 });
 
-interface LinkProps extends NextLinkComposedProps {
+interface LinkProps extends SharedProps {
   href: string | UrlObject;
   activeClassName?: string;
   as?: UrlObject;
@@ -93,7 +96,7 @@ const Link = forwardRef(function Link(
         ref={ref}
         component={NextLinkComposed}
         className={className}
-        href={href}
+        to={href}
         {...other}
       />
     );
