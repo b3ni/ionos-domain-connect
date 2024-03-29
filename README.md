@@ -28,6 +28,13 @@ docker run -it --rm -v $(pwd)/config.json:/config.json b3ni/ionos-domain-connect
     --domain <my-domain.com>
 ```
 
+## Setup a domain to updater (inside container)
+
+```
+/usr/local/bin/domain-connect-dyndns --config /config.json setup \
+    --domain <my-domain.com> 
+```
+
 ## TODO
 
 Send notifications
