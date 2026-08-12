@@ -1,0 +1,16 @@
+.git
+.gitignore
+.specify
+.opencode
+.agents
+specs
+AGENTS.md
+Dockerfile
+.dockerignore
+LICENSE.txt
+README.md
+webui/node_modules
+webui/.next
+webui/out
+webui/.env*
+*.log*
