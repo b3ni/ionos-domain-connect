@@ -4,6 +4,7 @@ import {
   BACKUP_DIR,
   CONFIG_PATH,
   readConfig,
+  writeConfig,
   type DomainConfig,
 } from "@/lib/config-store";
 
@@ -62,11 +63,90 @@ export interface UpdateSummary {
   raw: string;
 }
 
+/** Shown when a failed attempt produced no usable error text (FR-007). */
+export const FALLBACK_REASON =
+  "Update failed. No error details reported by the updater.";
+
+const REASON_MAX_LENGTH = 500;
+
+/** CLI status lines that describe the outcome, not the failure cause. */
+const STATUS_MARKERS = [
+  "DNS records successfully updated.",
+  "All records up to date",
+  "Could not update DNS records.",
+  "not configured",
+  "configured incorrectly",
+];
+
+/**
+ * Best-effort failure reason for one domain, extracted from the CLI's
+ * per-domain output block. Returns `null` when nothing usable remains.
+ */
+export function failureReasonForDomain(
+  domain: string,
+  stdout: string,
+  stderr: string
+): string | null {
+  const marker = `Read ${domain} config.`;
+  const idx = stdout.indexOf(marker);
+  const next = stdout.indexOf("\nRead ", idx + marker.length);
+  const block = stdout.slice(
+    idx === -1 ? 0 : idx + marker.length,
+    next === -1 ? undefined : next
+  );
+  const meaningful = (lines: string[]) =>
+    lines
+      .map((l) => l.trim())
+      .filter(
+        (l) =>
+          l &&
+          !l.startsWith("***") &&
+          !l.startsWith("Traceback") &&
+          !l.startsWith("File ") &&
+          !l.startsWith("^") &&
+          !STATUS_MARKERS.some((m) => l.includes(m))
+      );
+  const lines = [
+    ...meaningful(block.split("\n")),
+    ...meaningful(stderr.split("\n")),
+  ];
+  const last = lines[lines.length - 1];
+  if (!last) {
+    return null;
+  }
+  return last.slice(0, REASON_MAX_LENGTH);
+}
+
+/**
+ * Replaces the domain's stored token values with a placeholder so
+ * credentials never end up in a persisted or displayed reason (FR-008).
+ */
+export function redactSecrets(reason: string, domain: string): string {
+  let config: DomainConfig = {};
+  try {
+    config = readConfig();
+  } catch {
+    return reason;
+  }
+  const entry = config[domain];
+  let out = reason;
+  for (const field of ["access_token", "refresh_token"] as const) {
+    const value = entry?.[field];
+    if (value) {
+      out = out.split(value).join("[redacted]");
+    }
+  }
+  return out;
+}
+
 function outcomeForDomain(domain: string, stdout: string): UpdateOutcome {
   const marker = `Read ${domain} config.`;
   const idx = stdout.indexOf(marker);
-  const block =
-    idx === -1 ? stdout : stdout.slice(idx + marker.length, stdout.length);
+  const next = stdout.indexOf("\nRead ", idx + marker.length);
+  const block = stdout.slice(
+    idx === -1 ? 0 : idx + marker.length,
+    next === -1 ? undefined : next
+  );
   if (block.includes("DNS records successfully updated.")) return "ok";
   if (block.includes("All records up to date")) return "unchanged";
   if (block.includes("Could not update DNS records.")) return "error";
@@ -77,7 +157,7 @@ function outcomeForDomain(domain: string, stdout: string): UpdateOutcome {
 }
 
 export async function runUpdateAll(): Promise<UpdateSummary> {
-  const { stdout } = await runCli(["update", "--all"]);
+  const { stdout, stderr } = await runCli(["update", "--all"]);
   let config: DomainConfig = {};
   try {
     config = readConfig();
@@ -85,8 +165,30 @@ export async function runUpdateAll(): Promise<UpdateSummary> {
     config = {};
   }
   const domains: Record<string, UpdateOutcome> = {};
+  let changed = false;
   for (const domain of Object.keys(config)) {
-    domains[domain] = outcomeForDomain(domain, stdout);
+    const outcome = outcomeForDomain(domain, stdout);
+    domains[domain] = outcome;
+    const entry = config[domain];
+    if (outcome === "error") {
+      const reason = redactSecrets(
+        failureReasonForDomain(domain, stdout, stderr) ?? FALLBACK_REASON,
+        domain
+      );
+      if (entry.last_error !== reason) {
+        entry.last_error = reason;
+        changed = true;
+      }
+    } else if (
+      (outcome === "ok" || outcome === "unchanged") &&
+      entry.last_error !== undefined
+    ) {
+      delete entry.last_error;
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeConfig(config);
   }
   return { domains, raw: stdout };
 }

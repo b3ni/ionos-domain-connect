@@ -1,9 +1,11 @@
 import { readConfig, type DomainConfigEntry } from "@/lib/config-store";
+import { FALLBACK_REASON } from "@/lib/dyndns";
 
 export interface DomainView {
   name: string;
   lastUpdatedAt: string | null;
   lastResult: "ok" | "error" | "pending" | null;
+  lastError: string | null;
   currentIp: string | null;
 }
 
@@ -41,6 +43,8 @@ function toView(entry: DomainConfigEntry, name: string): DomainView {
     name,
     lastUpdatedAt: lastTs ? new Date(lastTs * 1000).toISOString() : null,
     lastResult,
+    lastError:
+      lastResult === "error" ? entry.last_error ?? FALLBACK_REASON : null,
     currentIp,
   };
 }

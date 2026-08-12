@@ -48,7 +48,24 @@ export function DomainTable({
             RESULT_META[domain.lastResult ?? "pending"] ?? RESULT_META.pending;
           return (
             <TableRow key={domain.name}>
-              <TableCell className="font-medium">{domain.name}</TableCell>
+              <TableCell className="font-medium">
+                <a
+                  href={`https://${domain.name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {domain.name}
+                </a>
+                {domain.lastResult === "error" && domain.lastError && (
+                  <p
+                    className="mt-0.5 max-w-72 truncate text-xs font-normal text-muted-foreground"
+                    title={domain.lastError}
+                  >
+                    {domain.lastError}
+                  </p>
+                )}
+              </TableCell>
               <TableCell className="tabular-nums">
                 {formatTime(domain.lastUpdatedAt)}
               </TableCell>

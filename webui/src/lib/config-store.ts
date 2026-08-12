@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { appError } from "@/lib/errors";
 
 export const CONFIG_PATH = process.env.CONFIG_PATH ?? "/config.json";
@@ -18,6 +18,7 @@ export interface DomainConfigEntry {
   last_dns_check?: number;
   last_success?: number;
   last_attempt?: number;
+  last_error?: string;
   ip?: Record<string, string>;
 }
 
@@ -50,6 +51,22 @@ export function configExists(): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Persists the whole config object, preserving every key and using the
+ * CLI-compatible `indent=1` formatting so the domain-connect-dyndns CLI
+ * round-trips our fields unchanged (verified against CLI source 0.0.9).
+ */
+export function writeConfig(config: DomainConfig): void {
+  try {
+    writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 1));
+  } catch {
+    throw appError(
+      "INTERNAL",
+      `Could not write config file ${CONFIG_PATH}`
+    );
   }
 }
 

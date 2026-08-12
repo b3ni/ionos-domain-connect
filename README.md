@@ -34,6 +34,11 @@ modes.
 Open `http://<host>:3000`. From the web interface you can:
 
 - see every managed subdomain with its last update status
+- see why a subdomain's last update failed: failed domains show the error
+  reported by the updater under the domain name (the reason is stored as
+  `last_error` in `config.json`, which the CLI preserves; it is cleared
+  after a successful update)
+- click a domain name to open its live website in a new browser tab
 - add a subdomain (the interface walks you through the provider
   authorization: open the link, enter the access code, done)
 - remove a subdomain
