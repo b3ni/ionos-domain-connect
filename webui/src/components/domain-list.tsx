@@ -73,6 +73,7 @@ export function DomainList({ initial }: { initial: DomainListData }) {
           <CardContent className="px-0">
             <DomainTable
               domains={data.domains}
+              onFinished={refresh}
               actions={(domain) => (
                 <div className="flex justify-end gap-1">
                   <RefreshDomainButton

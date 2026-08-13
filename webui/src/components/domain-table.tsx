@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ReauthorizeDomainButton } from "@/components/reauthorize-domain-button";
 import type { DomainView } from "@/lib/domains";
 import type { ReactNode } from "react";
 
@@ -31,9 +32,11 @@ const needsResync = (error: string): boolean =>
 export function DomainTable({
   domains,
   actions,
+  onFinished,
 }: {
   domains: DomainView[];
   actions?: (domain: DomainView) => ReactNode;
+  onFinished?: () => void;
 }) {
   return (
     <Table>
@@ -79,9 +82,10 @@ export function DomainTable({
                 {domain.lastResult === "error" &&
                   domain.lastError &&
                   needsResync(domain.lastError) && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Run setup again for this domain.
-                    </p>
+                    <ReauthorizeDomainButton
+                      domain={domain.name}
+                      onFinished={onFinished ?? (() => {})}
+                    />
                   )}
               </TableCell>
               <TableCell className="tabular-nums">
