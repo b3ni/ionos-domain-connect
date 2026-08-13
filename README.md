@@ -35,7 +35,8 @@ Open `http://<host>:3000`. From the web interface you can:
 
 - see every managed subdomain with its last update status
 - see why a subdomain's last update failed: failed domains show the error
-  reported by the updater under the domain name (the reason is stored as
+  reported by the updater under the domain name; hover or focus (Tab) the
+  error text to read the full message in a tooltip (the reason is stored as
   `last_error` in `config.json`, which the CLI preserves; it is cleared
   after a successful update)
 - click a domain name to open its live website in a new browser tab
@@ -45,6 +46,19 @@ Open `http://<host>:3000`. From the web interface you can:
 - trigger an immediate update of all subdomains
 
 The updater runs automatically every `INTERVAL_UPDATE` seconds (default 60).
+
+## Versioning
+
+The footer of the web interface shows the running version. A new version is
+created only by publishing a GitHub release — that release builds and
+pushes the Docker image (`b3ni/ionos-domain-connect:latest` +
+`:vX.Y.Z`), and the release tag (e.g. `v1.2.3`) is passed into the image as
+the `APP_VERSION` build arg and shown in the footer. Builds without a
+release version (local `docker build`, `npm run dev`) show `dev`:
+
+```bash
+docker build --build-arg APP_VERSION=test-1 -t ionos-domain-connect .
+```
 
 > **Note**: the interface has no authentication — only expose the port on a
 > trusted network.
