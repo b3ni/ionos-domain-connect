@@ -156,6 +156,41 @@ function outcomeForDomain(domain: string, stdout: string): UpdateOutcome {
   return "unknown";
 }
 
+/**
+ * Applies one domain's outcome to the config entry: sets `last_error`
+ * for failed attempts, clears it on success. Returns whether the config
+ * changed (i.e. must be written).
+ */
+function persistOutcome(
+  config: DomainConfig,
+  domain: string,
+  outcome: UpdateOutcome,
+  stdout: string,
+  stderr: string
+): boolean {
+  const entry = config[domain];
+  if (!entry) {
+    return false;
+  }
+  if (outcome === "error") {
+    const reason = redactSecrets(
+      failureReasonForDomain(domain, stdout, stderr) ?? FALLBACK_REASON,
+      domain
+    );
+    if (entry.last_error !== reason) {
+      entry.last_error = reason;
+      return true;
+    }
+  } else if (
+    (outcome === "ok" || outcome === "unchanged") &&
+    entry.last_error !== undefined
+  ) {
+    delete entry.last_error;
+    return true;
+  }
+  return false;
+}
+
 export async function runUpdateAll(): Promise<UpdateSummary> {
   const { stdout, stderr } = await runCli(["update", "--all"]);
   let config: DomainConfig = {};
@@ -169,28 +204,28 @@ export async function runUpdateAll(): Promise<UpdateSummary> {
   for (const domain of Object.keys(config)) {
     const outcome = outcomeForDomain(domain, stdout);
     domains[domain] = outcome;
-    const entry = config[domain];
-    if (outcome === "error") {
-      const reason = redactSecrets(
-        failureReasonForDomain(domain, stdout, stderr) ?? FALLBACK_REASON,
-        domain
-      );
-      if (entry.last_error !== reason) {
-        entry.last_error = reason;
-        changed = true;
-      }
-    } else if (
-      (outcome === "ok" || outcome === "unchanged") &&
-      entry.last_error !== undefined
-    ) {
-      delete entry.last_error;
-      changed = true;
-    }
+    changed = persistOutcome(config, domain, outcome, stdout, stderr) || changed;
   }
   if (changed) {
     writeConfig(config);
   }
   return { domains, raw: stdout };
+}
+
+/** Runs the updater for a single domain and persists its outcome. */
+export async function runUpdateOne(domain: string): Promise<UpdateSummary> {
+  const { stdout, stderr } = await runCli(["update", "--domain", domain]);
+  let config: DomainConfig = {};
+  try {
+    config = readConfig();
+  } catch {
+    config = {};
+  }
+  const outcome = outcomeForDomain(domain, stdout);
+  if (persistOutcome(config, domain, outcome, stdout, stderr)) {
+    writeConfig(config);
+  }
+  return { domains: { [domain]: outcome }, raw: stdout };
 }
 
 export async function removeDomain(domain: string): Promise<CliResult> {

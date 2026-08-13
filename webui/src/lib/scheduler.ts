@@ -1,4 +1,4 @@
-import { runUpdateAll, type UpdateSummary } from "@/lib/dyndns";
+import { runUpdateAll, runUpdateOne, type UpdateSummary } from "@/lib/dyndns";
 import { appError } from "@/lib/errors";
 
 let timer: NodeJS.Timeout | null = null;
@@ -26,23 +26,29 @@ export function stopScheduler(): void {
 }
 
 /**
- * Single update runner: scheduled ticks and manual triggers share one
- * lock, so two updates can never run concurrently.
+ * Runs an update under the single shared lock: scheduled ticks, global
+ * and per-domain manual triggers can never run concurrently.
  */
-export async function runUpdateNow(): Promise<UpdateSummary> {
+async function withLock<T>(label: string, fn: () => Promise<T>): Promise<T> {
   if (running) {
     throw appError("CONFLICT", "An update is already running.");
   }
   running = true;
   const ts = new Date().toISOString();
   try {
-    console.log(`[${ts}] Updating all domains ...`);
-    const summary = await runUpdateAll();
-    console.log(
-      `[${ts}] Update finished: ${JSON.stringify(summary.domains)}`
-    );
-    return summary;
+    console.log(`[${ts}] ${label}`);
+    const result = await fn();
+    console.log(`[${ts}] Update finished`);
+    return result;
   } finally {
     running = false;
   }
+}
+
+export function runUpdateNow(): Promise<UpdateSummary> {
+  return withLock("Updating all domains ...", runUpdateAll);
+}
+
+export function runUpdateOneNow(domain: string): Promise<UpdateSummary> {
+  return withLock(`Updating ${domain} ...`, () => runUpdateOne(domain));
 }

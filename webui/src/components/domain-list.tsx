@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { DomainList as DomainListData } from "@/lib/domains";
 import { DomainTable } from "@/components/domain-table";
 import { AddDomainForm } from "@/components/add-domain-form";
+import { RefreshDomainButton } from "@/components/refresh-domain-button";
 import { RemoveDomainButton } from "@/components/remove-domain-button";
 import { UpdateNowButton } from "@/components/update-now-button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -73,7 +74,13 @@ export function DomainList({ initial }: { initial: DomainListData }) {
             <DomainTable
               domains={data.domains}
               actions={(domain) => (
-                <RemoveDomainButton domain={domain.name} onRemoved={refresh} />
+                <div className="flex justify-end gap-1">
+                  <RefreshDomainButton
+                    domain={domain.name}
+                    onFinished={refresh}
+                  />
+                  <RemoveDomainButton domain={domain.name} onRemoved={refresh} />
+                </div>
               )}
             />
           </CardContent>

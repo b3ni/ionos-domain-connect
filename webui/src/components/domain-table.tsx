@@ -25,6 +25,9 @@ const RESULT_META: Record<
 const formatTime = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleString() : "—";
 
+const needsResync = (error: string): boolean =>
+  error.includes("Failed to get async token") || error.includes("NOTFOUND_SESSION");
+
 export function DomainTable({
   domains,
   actions,
@@ -73,6 +76,13 @@ export function DomainTable({
                     </TooltipContent>
                   </Tooltip>
                 )}
+                {domain.lastResult === "error" &&
+                  domain.lastError &&
+                  needsResync(domain.lastError) && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Run setup again for this domain.
+                    </p>
+                  )}
               </TableCell>
               <TableCell className="tabular-nums">
                 {formatTime(domain.lastUpdatedAt)}
