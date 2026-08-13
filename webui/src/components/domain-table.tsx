@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DomainView } from "@/lib/domains";
 import type { ReactNode } from "react";
 
@@ -58,12 +59,19 @@ export function DomainTable({
                   {domain.name}
                 </a>
                 {domain.lastResult === "error" && domain.lastError && (
-                  <p
-                    className="mt-0.5 max-w-72 truncate text-xs font-normal text-muted-foreground"
-                    title={domain.lastError}
-                  >
-                    {domain.lastError}
-                  </p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="mt-0.5 block max-w-72 cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left text-xs font-normal text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        {domain.lastError}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs break-words">
+                      {domain.lastError}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </TableCell>
               <TableCell className="tabular-nums">
