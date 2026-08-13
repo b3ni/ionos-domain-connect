@@ -43,10 +43,12 @@ Open `http://<host>:3000`. From the web interface you can:
   the updater for that domain only (global and per-domain updates share one
   lock, so concurrent runs are rejected with a clear message)
 - when a domain fails with a stale provider session ("Failed to get async
-  token ... NOTFOUND_SESSION"), the row additionally hints
-  "Run setup again for this domain." — the stored OAuth authorization is
-  no longer valid on the provider side and re-running the domain setup
-  restores it
+  token ... NOTFOUND_SESSION"), the row shows a "Run setup again for this
+  domain." action that re-authorizes the domain in the interface — the
+  stored OAuth authorization is no longer valid on the provider side and
+  re-authorizing reconnects the domain without removing it or changing its
+  DNS records; the setup dialog closes automatically with a success
+  message when done
 - click a domain name to open its live website in a new browser tab
 - add a subdomain (the interface walks you through the provider
   authorization: open the link, enter the access code, done)
