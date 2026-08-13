@@ -41,7 +41,11 @@ export async function POST(
       throw appError("VALIDATION", "Invalid domain in path");
     }
 
-    if (!isManaged(parsed.data.domain)) {
+    // The add flow submits its code while the domain is not yet in the
+    // config (the CLI writes it when setup completes), so the managed
+    // check only applies when no setup session is in progress (re-setup
+    // entry point protection, feature 005).
+    if (!getSession(parsed.data.domain) && !isManaged(parsed.data.domain)) {
       throw appError(
         "NOT_FOUND",
         `${parsed.data.domain} is not managed.`
