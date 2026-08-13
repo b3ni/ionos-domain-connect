@@ -39,6 +39,14 @@ Open `http://<host>:3000`. From the web interface you can:
   error text to read the full message in a tooltip (the reason is stored as
   `last_error` in `config.json`, which the CLI preserves; it is cleared
   after a successful update)
+- refresh a single subdomain: each row has its own update button that runs
+  the updater for that domain only (global and per-domain updates share one
+  lock, so concurrent runs are rejected with a clear message)
+- when a domain fails with a stale provider session ("Failed to get async
+  token ... NOTFOUND_SESSION"), the row additionally hints
+  "Run setup again for this domain." — the stored OAuth authorization is
+  no longer valid on the provider side and re-running the domain setup
+  restores it
 - click a domain name to open its live website in a new browser tab
 - add a subdomain (the interface walks you through the provider
   authorization: open the link, enter the access code, done)
