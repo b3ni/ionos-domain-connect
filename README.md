@@ -54,6 +54,13 @@ Open `http://<host>:3000`. From the web interface you can:
   authorization: open the link, enter the access code, done)
 - remove a subdomain
 - trigger an immediate update of all subdomains
+- open the **Configuración** section to view and edit `config.json` — the
+  same file the updater CLI reads and writes — as a masked JSON tree
+  (tokens hidden until revealed) or as raw text; a corrupt/unreadable
+  config can be repaired directly from the interface. Saves are validated
+  (must remain a valid domain map), backed up to `/backups` before every
+  overwrite, and rejected with a conflict message if the file changed on
+  disk since it was loaded
 
 The updater runs automatically every `INTERVAL_UPDATE` seconds (default 60).
 

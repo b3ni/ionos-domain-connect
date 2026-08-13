@@ -24,7 +24,8 @@ never commit). The web UI binary is overridable via `DYNDNS_CLI`.
   `next dev` and warns that this Next version has breaking changes vs. training data — read
   `node_modules/next/dist/docs/` before writing code; don't fight the block.
 - API routes: `api/domains` (GET list / POST add), `api/domains/[domain]` (DELETE remove),
-  `api/domains/[domain]/setup` (GET session), `api/update` (POST manual trigger). All handlers
+  `api/domains/[domain]/setup` (GET session), `api/config` (GET file state / PUT validated
+  save with backup + conflict detection), `api/update` (POST manual trigger). All handlers
   return errors through `src/lib/errors.ts` (`AppError` → code/HTTP mapping).
 - Update outcomes are parsed from CLI stdout text in `src/lib/dyndns.ts`
   ("DNS records successfully updated.", "All records up to date", ...) — brittle coupling to
