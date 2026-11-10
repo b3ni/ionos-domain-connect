@@ -9,6 +9,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 INTERVAL_UPDATE = int(os.getenv("INTERVAL_UPDATE", 60))
 CONFIG_PATH = os.getenv("CONFIG_PATH", "/config.json")
+CLI_TIMEOUT = int(os.getenv("CLI_TIMEOUT", 120))
 
 scheduler = BlockingScheduler()
 
@@ -16,9 +17,17 @@ scheduler = BlockingScheduler()
 @scheduler.scheduled_job(IntervalTrigger(seconds=INTERVAL_UPDATE))
 def update_all_domains():
     print("[%s] Update all domains ..." % datetime.now(), flush=True)
-    subprocess.call(
-        ["domain-connect-dyndns", "--config", CONFIG_PATH, "update", "--all"]
-    )
+    try:
+        subprocess.run(
+            ["domain-connect-dyndns", "--config", CONFIG_PATH, "update", "--all"],
+            timeout=CLI_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            "[%s] Update timed out after %s sec. and was stopped"
+            % (datetime.now(), CLI_TIMEOUT),
+            flush=True,
+        )
 
 
 def shutdown(_signum, _frame):

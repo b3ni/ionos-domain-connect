@@ -191,18 +191,9 @@ export function saveConfig(
     );
   }
 
-  // Atomic replace: write to a temp file, then rename over the target so
-  // the scheduler never reads a half-written file.
-  const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
-    writeFileSync(tmpPath, JSON.stringify(parsed, null, 1));
-    renameSync(tmpPath, CONFIG_PATH);
+    replaceConfigFile(JSON.stringify(parsed, null, 1));
   } catch (writeError) {
-    try {
-      unlinkSync(tmpPath);
-    } catch {
-      // best-effort cleanup; report the original error below
-    }
     throw appError(
       "INTERNAL",
       `Could not write config file ${CONFIG_PATH}`,
@@ -211,4 +202,32 @@ export function saveConfig(
   }
 
   return { backupPath };
+}
+
+/**
+ * Atomic replace when possible: write to a temp file, then rename over the
+ * target so the scheduler never reads a half-written file. When the config
+ * is a single-file bind mount (`-v ./config.json:/config.json`, the
+ * documented setup) the kernel refuses to rename over the mount point
+ * (EBUSY); fall back to overwriting the file in place, which writes through
+ * the mount to the host file.
+ */
+function replaceConfigFile(content: string): void {
+  const tmpPath = `${CONFIG_PATH}.tmp`;
+  try {
+    writeFileSync(tmpPath, content);
+    renameSync(tmpPath, CONFIG_PATH);
+    return;
+  } catch (error) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // best-effort cleanup
+    }
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EBUSY" && code !== "EXDEV") {
+      throw error;
+    }
+  }
+  writeFileSync(CONFIG_PATH, content);
 }

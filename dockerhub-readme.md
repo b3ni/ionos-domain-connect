@@ -19,6 +19,8 @@ docker run -d \
 
 ## Quick start (docker compose)
 
+Create the config file first (`echo '{}' > config.json`) — otherwise Docker mounts an empty directory in its place and the container refuses to start.
+
 ```yaml
 services:
   ionos-domain-connect:
@@ -67,6 +69,7 @@ Inside the container the binaries are `domain-connect-dyndns` (Python) and `node
 | --------------- | ---------------- | ------------------------------------------------------ |
 | `ENABLE_WEBUI`  | *(unset)*        | `true` starts the web UI; otherwise headless updater   |
 | `INTERVAL_UPDATE` | `60`           | Update interval in seconds                             |
+| `CLI_TIMEOUT`   | `120`            | Max seconds per updater run before it is stopped       |
 | `CONFIG_PATH`   | `/config.json`   | Path to the IONOS config file                          |
 | `DYNDNS_CLI`    | `domain-connect-dyndns` | Override the CLI binary used by the web UI       |
 | `BACKUP_DIR`    | `/backups`       | Where backups are written when removing a domain       |

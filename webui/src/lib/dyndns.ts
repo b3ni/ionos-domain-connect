@@ -14,19 +14,65 @@ export interface CliResult {
   stdout: string;
   stderr: string;
   code: number | null;
+  /** True when the CLI was killed for exceeding CLI_TIMEOUT. */
+  timedOut: boolean;
 }
+
+/** Max seconds a non-interactive CLI run may take before it is killed. */
+const CLI_TIMEOUT_SEC = (() => {
+  const value = Number(process.env.CLI_TIMEOUT ?? "120");
+  return Number.isFinite(value) && value > 0 ? value : 120;
+})();
+const KILL_GRACE_MS = 5000;
 
 function runCli(args: string[]): Promise<CliResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(CLI, ["--config", CONFIG_PATH, ...args]);
+    // Own process group so a timeout also kills any grandchildren that
+    // would otherwise keep stdout open and delay the "close" event.
+    const child = spawn(CLI, ["--config", CONFIG_PATH, ...args], {
+      detached: true,
+    });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | null = null;
+    const killGroup = (signal: NodeJS.Signals) => {
+      try {
+        if (child.pid) process.kill(-child.pid, signal);
+      } catch {
+        // already gone
+      }
+    };
+    // A hung CLI (network, provider) would otherwise hold the update lock
+    // forever and block every later scheduled or manual update.
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      killGroup("SIGTERM");
+      killTimer = setTimeout(() => killGroup("SIGKILL"), KILL_GRACE_MS);
+    }, CLI_TIMEOUT_SEC * 1000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+    };
     child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
     child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ stdout, stderr, code }));
+    child.on("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.on("close", (code) => {
+      cleanup();
+      if (timedOut) {
+        stderr += `\nThe updater timed out after ${CLI_TIMEOUT_SEC}s and was stopped.\n`;
+      }
+      resolve({ stdout, stderr, code, timedOut });
+    });
   });
 }
+
+/** A run killed by the timeout counts as failed for domains without a clear outcome. */
+const settle = (outcome: UpdateOutcome, timedOut: boolean): UpdateOutcome =>
+  timedOut && outcome === "unknown" ? "error" : outcome;
 
 /**
  * Best-effort human message from CLI output. Skips the version banner and
@@ -192,7 +238,7 @@ function persistOutcome(
 }
 
 export async function runUpdateAll(): Promise<UpdateSummary> {
-  const { stdout, stderr } = await runCli(["update", "--all"]);
+  const { stdout, stderr, timedOut } = await runCli(["update", "--all"]);
   let config: DomainConfig = {};
   try {
     config = readConfig();
@@ -202,7 +248,7 @@ export async function runUpdateAll(): Promise<UpdateSummary> {
   const domains: Record<string, UpdateOutcome> = {};
   let changed = false;
   for (const domain of Object.keys(config)) {
-    const outcome = outcomeForDomain(domain, stdout);
+    const outcome = settle(outcomeForDomain(domain, stdout), timedOut);
     domains[domain] = outcome;
     changed = persistOutcome(config, domain, outcome, stdout, stderr) || changed;
   }
@@ -214,14 +260,18 @@ export async function runUpdateAll(): Promise<UpdateSummary> {
 
 /** Runs the updater for a single domain and persists its outcome. */
 export async function runUpdateOne(domain: string): Promise<UpdateSummary> {
-  const { stdout, stderr } = await runCli(["update", "--domain", domain]);
+  const { stdout, stderr, timedOut } = await runCli([
+    "update",
+    "--domain",
+    domain,
+  ]);
   let config: DomainConfig = {};
   try {
     config = readConfig();
   } catch {
     config = {};
   }
-  const outcome = outcomeForDomain(domain, stdout);
+  const outcome = settle(outcomeForDomain(domain, stdout), timedOut);
   if (persistOutcome(config, domain, outcome, stdout, stderr)) {
     writeConfig(config);
   }
@@ -272,7 +322,7 @@ export function startSetup(domain: string): SetupChild {
 
   const done = new Promise<CliResult>((resolve) => {
     proc.on("close", (code) =>
-      resolve({ stdout, stderr, code: code === null ? null : code })
+      resolve({ stdout, stderr, code: code === null ? null : code, timedOut: false })
     );
   });
 
