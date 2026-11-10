@@ -67,8 +67,9 @@ Open `http://<host>:3000`. From the web interface you can:
 - remove a subdomain
 - trigger an immediate update of all subdomains
 - open the **Configuración** section to view and edit `config.json` — the
-  same file the updater CLI reads and writes — as a masked JSON tree
-  (tokens hidden until revealed) or as raw text; a corrupt/unreadable
+  same file the updater CLI reads and writes — as a JSON tree or as raw
+  text. OAuth tokens never leave the server: they are shown as
+  `__SECRET_…__` placeholders and restored when you save; a corrupt/unreadable
   config can be repaired directly from the interface. Saves are validated
   (must remain a valid domain map), backed up to `/backups` before every
   overwrite, and rejected with a conflict message if the file changed on
@@ -93,7 +94,10 @@ docker build --build-arg APP_VERSION=test-1 -t ionos-domain-connect .
 ```
 
 > **Note**: the interface has no authentication — only expose the port on a
-> trusted network.
+> trusted network. State-changing API requests coming from another website
+> (cross-site, checked via `Sec-Fetch-Site` / `Origin`) are rejected with
+> 403; behind a reverse proxy, forward the original host (`Host` or
+> `X-Forwarded-Host`).
 
 ## Setup a domain via the CLI (alternative to the web UI)
 
