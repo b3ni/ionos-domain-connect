@@ -1,5 +1,5 @@
 import { runUpdateAll, runUpdateOne, type UpdateSummary } from "@/lib/dyndns";
-import { appError } from "@/lib/errors";
+import { AppError, appError } from "@/lib/errors";
 
 let timer: NodeJS.Timeout | null = null;
 let started = false;
@@ -13,7 +13,18 @@ export function startScheduler(): void {
   const intervalSec = Number(process.env.INTERVAL_UPDATE ?? "60");
   const intervalMs = Math.max(intervalSec * 1000, 1000);
   timer = setInterval(() => {
-    void runUpdateNow();
+    runUpdateNow().catch((error: unknown) => {
+      if (error instanceof AppError && error.code === "CONFLICT") {
+        console.log(
+          `[${new Date().toISOString()}] Scheduled update skipped: an update is already running`
+        );
+        return;
+      }
+      console.error(
+        `[${new Date().toISOString()}] Scheduled update failed:`,
+        error
+      );
+    });
   }, intervalMs);
   console.log(`[scheduler] started, update interval ${intervalSec}s`);
 }

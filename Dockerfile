@@ -16,14 +16,14 @@ ENV HOSTNAME=0.0.0.0
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION
 
+COPY requirements.txt /tmp/requirements.txt
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip \
+    && apt-get install -y --no-install-recommends python3 python3-pip tini \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --break-system-packages domain-connect-dyndns apscheduler
+    && pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
 
 RUN mkdir -p /backups
-
-VOLUME /config.json
 
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
@@ -35,4 +35,6 @@ COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
+# tini reaps orphaned CLI processes (node / python would otherwise be PID 1)
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["./docker-entrypoint.sh"]

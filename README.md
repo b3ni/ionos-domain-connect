@@ -7,6 +7,13 @@ CLI on a schedule and lets you manage your subdomains from the browser.
 
 ## Docker compose
 
+Create the config file on the host first — if it does not exist, Docker
+mounts an empty directory in its place and the container refuses to start:
+
+```bash
+echo '{}' > config.json
+```
+
 ```yaml
 services:
     ionos-domain-connect:
@@ -63,6 +70,9 @@ Open `http://<host>:3000`. From the web interface you can:
   disk since it was loaded
 
 The updater runs automatically every `INTERVAL_UPDATE` seconds (default 60).
+A single updater run is stopped after `CLI_TIMEOUT` seconds (default 120) so
+a hung provider call cannot block later updates; in the web interface the
+affected domains show the timeout as their failure reason.
 
 ## Versioning
 
@@ -96,9 +106,9 @@ Inside the container the binaries are `domain-connect-dyndns` (Python) and
 
 - The web app lives in `webui/` (Next.js App Router + shadcn/ui + Tailwind
   v4). Build the image with `docker build -t ionos-domain-connect .`.
-- Python dependencies for the CLI are installed in the Dockerfile
-  (`pip install domain-connect-dyndns`); npm dependencies are in
-  `webui/package-lock.json`.
+- Python dependencies are pinned in `requirements.txt` (the web UI parses
+  the `domain-connect-dyndns` output, so bump it deliberately); npm
+  dependencies are in `webui/package-lock.json`.
 - `config.json` holds IONOS credentials after setup and is gitignored —
   never commit it.
 

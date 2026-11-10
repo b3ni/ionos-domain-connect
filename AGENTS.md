@@ -16,7 +16,11 @@ subdomains. No tests, no Python deps file, no typecheck script — verification 
 
 Both modes just shell out to `domain-connect-dyndns --config $CONFIG_PATH update --all`.
 `CONFIG_PATH` defaults to `/config.json` (holds IONOS credentials after setup, gitignored —
-never commit). The web UI binary is overridable via `DYNDNS_CLI`.
+never commit). The web UI binary is overridable via `DYNDNS_CLI`. Non-interactive CLI runs are
+killed after `CLI_TIMEOUT` seconds (default 120) in both modes.
+
+`/config.json` is normally a single-file bind mount: never `rename()` over it (EBUSY) —
+`config-store.ts` falls back to an in-place write. The entrypoint exits if it is a directory.
 
 ## Web UI (`webui/`)
 
@@ -41,8 +45,9 @@ never commit). The web UI binary is overridable via `DYNDNS_CLI`.
 - `webui/`: `npm run dev` (note: `instrumentation.ts` starts the real scheduler in dev too,
   and the CLI must be on PATH with a valid config), `npm run lint` (ESLint only), `npm run build`.
 - Docker: `docker build -t ionos-domain-connect .` — context is repo root; `.dockerignore`
-  excludes `webui/node_modules` and `webui/.next`. Python deps (`domain-connect-dyndns`,
-  `apscheduler`) are declared only in the Dockerfile `pip install` line.
+  excludes `webui/node_modules` and `webui/.next`. Python deps are pinned in
+  `requirements.txt` (`domain-connect-dyndns==0.0.9` because of the stdout parsing,
+  `apscheduler<4` because 4.x drops `BlockingScheduler`).
 - CI (`.github/workflows/docker-image.yml`) runs **only on GitHub release published**:
   multi-arch buildx push to Docker Hub `b3ni/ionos-domain-connect`, needs
   `DOCKERHUB_USERNAME`/`DOCKERHUB_PASSWORD` secrets. Commits/pushes never trigger a build.

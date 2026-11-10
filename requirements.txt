@@ -1,0 +1,5 @@
+# Pinned: webui/src/lib/dyndns.ts parses this CLI's stdout text
+# (verified against 0.0.9) — bump deliberately and re-check the markers.
+domain-connect-dyndns==0.0.9
+# APScheduler 4 removes BlockingScheduler used by src/updater.py.
+apscheduler>=3.10,<4
