@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webui:
+    name: Web UI (lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # next build also runs the TypeScript check
+      - run: npm run build
+
+  docker:
+    name: Docker image (build + smoke test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (amd64, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ionos-domain-connect:ci
+          build-args: |
+            APP_VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Python deps match the pins and the updater imports
+        run: |
+          docker run --rm --entrypoint python3 ionos-domain-connect:ci -c "
+          import importlib.metadata as m
+          assert m.version('domain-connect-dyndns') == '0.0.9', m.version('domain-connect-dyndns')
+          from apscheduler.schedulers.blocking import BlockingScheduler
+          import dyndns.command_line
+          print('ok')"
+
+      - name: Entrypoint refuses a directory as config
+        run: |
+          mkdir not-a-file
+          if docker run --rm -v "$PWD/not-a-file:/config.json" ionos-domain-connect:ci; then
+            echo "expected the container to exit with an error"; exit 1
+          fi
+
+      - name: Web UI starts and serves the API
+        run: |
+          echo '{}' > config.json
+          docker run -d --name smoke -p 3000:3000 -e ENABLE_WEBUI=true \
+            -v "$PWD/config.json:/config.json" ionos-domain-connect:ci
+          for i in $(seq 30); do
+            curl -sf localhost:3000/api/domains && break
+            sleep 1
+          done
+          curl -sf localhost:3000/api/domains | grep -q '"domains":\[\]'
+          curl -sf localhost:3000/ | grep -q 'Managed domains'
+          # cross-site guard is active
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3000/api/update -H 'Origin: http://evil.example')" = 403
+
+      - name: Container logs
+        if: always()
+        run: docker logs smoke 2>&1 | tail -50 || true
