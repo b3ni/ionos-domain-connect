@@ -18,6 +18,20 @@ if [ ! -e "$CONFIG_PATH" ]; then
 fi
 
 if [ "$ENABLE_WEBUI" = "true" ]; then
+    # Docker secrets: read the password from a file instead of the environment.
+    if [ -n "$WEBUI_PASSWORD_FILE" ]; then
+        if [ ! -r "$WEBUI_PASSWORD_FILE" ]; then
+            echo "[entrypoint] ERROR: WEBUI_PASSWORD_FILE=$WEBUI_PASSWORD_FILE is not readable." >&2
+            exit 1
+        fi
+        WEBUI_PASSWORD="$(cat "$WEBUI_PASSWORD_FILE")"
+        export WEBUI_PASSWORD
+    fi
+    if [ -n "$WEBUI_PASSWORD" ]; then
+        echo "[entrypoint] web UI authentication enabled (user: ${WEBUI_USERNAME:-admin})"
+    else
+        echo "[entrypoint] WARNING: web UI has no authentication; set WEBUI_PASSWORD to require a login" >&2
+    fi
     echo "[entrypoint] ENABLE_WEBUI=true -> starting web UI (port 3000) with in-process scheduler"
     exec node server.js
 fi

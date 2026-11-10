@@ -24,6 +24,7 @@ services:
         environment:
             - ENABLE_WEBUI=true   # web interface; absent/false = headless updater only
             - INTERVAL_UPDATE=60    # seconds
+            - WEBUI_PASSWORD=change-me  # optional: require a login (user "admin")
         volumes:
             - ./config.json:/config.json
 ```
@@ -93,11 +94,27 @@ release version (local `docker build`, `npm run dev`) show `dev`:
 docker build --build-arg APP_VERSION=test-1 -t ionos-domain-connect .
 ```
 
-> **Note**: the interface has no authentication — only expose the port on a
-> trusted network. State-changing API requests coming from another website
-> (cross-site, checked via `Sec-Fetch-Site` / `Origin`) are rejected with
-> 403; behind a reverse proxy, forward the original host (`Host` or
-> `X-Forwarded-Host`).
+## Authentication
+
+Authentication is **optional** and off by default. Set `WEBUI_PASSWORD` to
+protect the whole interface (pages and API) with HTTP Basic auth; the user
+is `admin` unless you set `WEBUI_USERNAME`. With Docker secrets, use
+`WEBUI_PASSWORD_FILE=/run/secrets/<name>` instead. The container log says
+whether authentication is enabled; the password is never logged.
+
+```bash
+curl -u admin:change-me http://<host>:3000/api/domains
+```
+
+Basic auth sends the password with every request: use it behind HTTPS (a
+reverse proxy) when the interface is reachable from outside your network.
+Without `WEBUI_PASSWORD`, anyone who can reach the port controls the
+interface — only expose it on a trusted network.
+
+In both modes, state-changing API requests coming from another website
+(cross-site, checked via `Sec-Fetch-Site` / `Origin`) are rejected with
+403; behind a reverse proxy, forward the original host (`Host` or
+`X-Forwarded-Host`).
 
 ## Setup a domain via the CLI (alternative to the web UI)
 
