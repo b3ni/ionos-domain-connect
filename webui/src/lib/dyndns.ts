@@ -126,9 +126,34 @@ const STATUS_MARKERS = [
   "DNS records successfully updated.",
   "All records up to date",
   "Could not update DNS records.",
-  "not configured",
-  "configured incorrectly",
 ];
+
+/**
+ * Status line printed for a domain rejected before its config is read —
+ * the CLI then prints no "Read <domain> config." marker for it.
+ */
+const REJECTED_LINE_RE =
+  /^Domain (\S+) (?:not configured\.|configured incorrectly\. Rerun setup\.)$/gm;
+
+/**
+ * The part of an `update` run's stdout that belongs to one domain: from its
+ * "Read <domain> config." marker up to the next domain's output, or just
+ * its rejection line. Empty when the run printed nothing for the domain.
+ */
+function blockForDomain(domain: string, stdout: string): string {
+  const rejections = [...stdout.matchAll(REJECTED_LINE_RE)];
+  const marker = `Read ${domain} config.`;
+  const idx = stdout.indexOf(marker);
+  if (idx === -1) {
+    return rejections.find((m) => m[1] === domain)?.[0] ?? "";
+  }
+  const start = idx + marker.length;
+  const ends = [
+    stdout.indexOf("\nRead ", start),
+    ...rejections.map((m) => m.index).filter((i) => i > start),
+  ].filter((i) => i !== -1);
+  return stdout.slice(start, ends.length ? Math.min(...ends) : undefined);
+}
 
 /**
  * Best-effort failure reason for one domain, extracted from the CLI's
@@ -139,13 +164,7 @@ export function failureReasonForDomain(
   stdout: string,
   stderr: string
 ): string | null {
-  const marker = `Read ${domain} config.`;
-  const idx = stdout.indexOf(marker);
-  const next = stdout.indexOf("\nRead ", idx + marker.length);
-  const block = stdout.slice(
-    idx === -1 ? 0 : idx + marker.length,
-    next === -1 ? undefined : next
-  );
+  const block = blockForDomain(domain, stdout);
   const meaningful = (lines: string[]) =>
     lines
       .map((l) => l.trim())
@@ -191,14 +210,8 @@ export function redactSecrets(reason: string, domain: string): string {
   return out;
 }
 
-function outcomeForDomain(domain: string, stdout: string): UpdateOutcome {
-  const marker = `Read ${domain} config.`;
-  const idx = stdout.indexOf(marker);
-  const next = stdout.indexOf("\nRead ", idx + marker.length);
-  const block = stdout.slice(
-    idx === -1 ? 0 : idx + marker.length,
-    next === -1 ? undefined : next
-  );
+export function outcomeForDomain(domain: string, stdout: string): UpdateOutcome {
+  const block = blockForDomain(domain, stdout);
   if (block.includes("DNS records successfully updated.")) return "ok";
   if (block.includes("All records up to date")) return "unchanged";
   if (block.includes("Could not update DNS records.")) return "error";
