@@ -5,8 +5,6 @@ import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import {
-  Eye,
-  EyeOff,
   FileCode2,
   FileJson,
   Loader2,
@@ -34,39 +32,8 @@ const JsonViewEditor = dynamic(
 
 const TOKEN_KEYS = new Set(["access_token", "refresh_token"]);
 
-interface Secret {
-  placeholder: string;
-  real: string;
-}
-
-function collectSecrets(parsed: DomainConfig): Secret[] {
-  const secrets: Secret[] = [];
-  let index = 0;
-  for (const entry of Object.values(parsed)) {
-    if (!entry || typeof entry !== "object") continue;
-    for (const [key, value] of Object.entries(entry)) {
-      if (TOKEN_KEYS.has(key) && typeof value === "string" && value) {
-        secrets.push({ placeholder: `__SECRET_${index}__`, real: value });
-        index += 1;
-      }
-    }
-  }
-  return secrets;
-}
-
-function applySecrets(
-  text: string,
-  secrets: Secret[],
-  direction: "toPlaceholder" | "toReal"
-): string {
-  let next = text;
-  for (const { placeholder, real } of secrets) {
-    const [from, to] =
-      direction === "toPlaceholder" ? [real, placeholder] : [placeholder, real];
-    next = next.replaceAll(from, to);
-  }
-  return next;
-}
+/** Tokens arrive already masked by the server (config-store maskSecrets). */
+const PLACEHOLDER_RE = /^__SECRET_[0-9a-f]{16}__$/;
 
 function renameKeyInConfig(
   config: DomainConfig,
@@ -100,28 +67,10 @@ function renameKeyInConfig(
   return next;
 }
 
-function MaskedValue({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false);
+function HiddenValue() {
   return (
-    <span className="inline-flex items-center gap-1">
-      {revealed ? (
-        <span className="break-all">{value}</span>
-      ) : (
-        <span aria-hidden>••••••••</span>
-      )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-4"
-        aria-label={revealed ? "Hide value" : "Show value"}
-        onClick={(event) => {
-          event.stopPropagation();
-          setRevealed((prev) => !prev);
-        }}
-      >
-        {revealed ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
-      </Button>
+    <span className="text-muted-foreground" title="Hidden: the stored token is kept when you save">
+      •••••••• (hidden)
     </span>
   );
 }
@@ -136,8 +85,6 @@ export function ConfigEditor() {
   const [text, setText] = useState("");
   const [loadedText, setLoadedText] = useState("");
   const [baseRaw, setBaseRaw] = useState<string | null>(null);
-  const [secrets, setSecrets] = useState<Secret[]>([]);
-  const [secretsRevealed, setSecretsRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
   const requestSeq = useRef(0);
 
@@ -153,17 +100,12 @@ export function ConfigEditor() {
       if (seq !== requestSeq.current) return;
       setView(state);
       setBaseRaw(state.raw);
-      setSecretsRevealed(false);
       if (state.parsed) {
-        const found = collectSecrets(state.parsed);
-        setSecrets(found);
         setTreeValue(state.parsed);
-        const masked = applySecrets(state.raw ?? "", found, "toPlaceholder");
-        setText(masked);
-        setLoadedText(masked);
+        setText(state.raw ?? "");
+        setLoadedText(state.raw ?? "");
         setMode("tree");
       } else {
-        setSecrets([]);
         setTreeValue(null);
         setText(state.raw ?? "");
         setLoadedText(state.raw ?? "");
@@ -189,23 +131,12 @@ export function ConfigEditor() {
     load();
   }, [load]);
 
-  const displayText = useMemo(
-    () =>
-      applySecrets(text, secrets, secretsRevealed ? "toReal" : "toPlaceholder"),
-    [text, secrets, secretsRevealed]
-  );
-
   const treeDirty = useMemo(() => {
     if (!view?.parsed || treeValue === null) return false;
     return JSON.stringify(treeValue) !== JSON.stringify(view.parsed);
   }, [view, treeValue]);
 
-  const textDirty = useMemo(() => {
-    const baseline = secretsRevealed
-      ? applySecrets(loadedText, secrets, "toReal")
-      : loadedText;
-    return displayText !== baseline;
-  }, [displayText, loadedText, secrets, secretsRevealed]);
+  const textDirty = text !== loadedText;
 
   const handleEdit = useCallback(
     (option: {
@@ -225,22 +156,10 @@ export function ConfigEditor() {
     []
   );
 
-  const beforeCopy = useCallback(
-    (copyText: string) => {
-      if (secrets.some((secret) => secret.real === copyText)) {
-        return "••••••••";
-      }
-      return copyText;
-    },
-    [secrets]
-  );
-
   const save = useCallback(async () => {
     if (!view?.exists || saving) return;
     const raw =
-      mode === "tree"
-        ? JSON.stringify(treeValue, null, 1)
-        : applySecrets(text, secrets, "toReal");
+      mode === "tree" ? JSON.stringify(treeValue, null, 1) : text;
     setSaving(true);
     try {
       const res = await fetch("/api/config", {
@@ -269,7 +188,7 @@ export function ConfigEditor() {
     } finally {
       setSaving(false);
     }
-  }, [view, saving, mode, treeValue, text, secrets, baseRaw, load, reload]);
+  }, [view, saving, mode, treeValue, text, baseRaw, load, reload]);
 
   if (!opened) {
     return (
@@ -326,12 +245,6 @@ export function ConfigEditor() {
                 </Button>
               </div>
             )}
-            {showText && secrets.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setSecretsRevealed((prev) => !prev)}>
-                {secretsRevealed ? <EyeOff /> : <Eye />}
-                {secretsRevealed ? "Hide secrets" : "Show secrets"}
-              </Button>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -373,7 +286,7 @@ export function ConfigEditor() {
             <Textarea
               className="font-mono text-xs"
               rows={16}
-              value={displayText}
+              value={text}
               onChange={(event) => setText(event.target.value)}
               spellCheck={false}
             />
@@ -389,7 +302,6 @@ export function ConfigEditor() {
             displayDataTypes={false}
             displayObjectSize={false}
             enableClipboard
-            beforeCopy={beforeCopy}
           >
             <JsonView.String
               render={(_props, { type, value, keyName }) => {
@@ -398,9 +310,9 @@ export function ConfigEditor() {
                   typeof value === "string" &&
                   typeof keyName === "string" &&
                   TOKEN_KEYS.has(keyName) &&
-                  secrets.some((secret) => secret.real === value)
+                  PLACEHOLDER_RE.test(value)
                 ) {
-                  return <MaskedValue value={value} />;
+                  return <HiddenValue />;
                 }
                 return undefined;
               }}
@@ -408,11 +320,18 @@ export function ConfigEditor() {
           </JsonViewEditor>
         )}
 
+        {!loading && showText && view?.exists && (
+          <p className="text-muted-foreground mb-2 text-xs">
+            Tokens are hidden as <code>__SECRET_…__</code> placeholders. Leave
+            them as they are: the stored value is restored when you save.
+          </p>
+        )}
+
         {!loading && showText && view?.parsed && (
           <Textarea
             className="font-mono text-xs"
             rows={16}
-            value={displayText}
+            value={text}
             onChange={(event) => setText(event.target.value)}
             spellCheck={false}
           />

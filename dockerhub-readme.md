@@ -46,7 +46,7 @@ Open `http://<host>:3000`. From the web interface you can:
 
 The updater runs automatically every `INTERVAL_UPDATE` seconds (default 60).
 
-> **Note**: the interface has no authentication — only expose the port on a trusted network.
+> **Note**: the interface has no authentication — only expose the port on a trusted network. Cross-site API requests are rejected (403); behind a reverse proxy, forward the original host (`Host` or `X-Forwarded-Host`).
 
 ## Web on/off
 

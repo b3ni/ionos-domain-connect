@@ -6,15 +6,59 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { appError } from "@/lib/errors";
 
+/**
+ * Config as served to the browser. `raw` and `parsed` have every
+ * access_token / refresh_token replaced by a `__SECRET_<hash>__` placeholder
+ * (see maskSecrets): the tokens themselves never leave the server.
+ */
 export interface ConfigFileState {
   path: string;
   exists: boolean;
   raw: string | null;
   parsed: DomainConfig | null;
   parseError: string | null;
+}
+
+/** `"access_token": "<value>"` / `"refresh_token": …`, JSON-escaped value. */
+const SECRET_FIELD_RE =
+  /("(?:access_token|refresh_token)"\s*:\s*")((?:[^"\\]|\\.)*)(")/g;
+const PLACEHOLDER_RE = /__SECRET_[0-9a-f]{16}__/g;
+
+/** Derived from the value itself, so it survives moving/renaming entries. */
+const placeholderFor = (value: string): string =>
+  `__SECRET_${createHash("sha256").update(value).digest("hex").slice(0, 16)}__`;
+
+/**
+ * Replaces token values with placeholders in the raw text. Works on text
+ * (not parsed JSON) so a corrupt, unparseable file is masked too and the
+ * original formatting is kept.
+ */
+export function maskSecrets(raw: string): string {
+  return raw.replace(SECRET_FIELD_RE, (match, pre: string, value: string, post: string) =>
+    value ? `${pre}${placeholderFor(value)}${post}` : match
+  );
+}
+
+/** Restores placeholders from the tokens currently stored on disk. */
+function unmaskSecrets(masked: string, currentRaw: string): string {
+  const known = new Map<string, string>();
+  for (const match of currentRaw.matchAll(SECRET_FIELD_RE)) {
+    if (match[2]) known.set(placeholderFor(match[2]), match[2]);
+  }
+  return masked.replace(PLACEHOLDER_RE, (placeholder) => {
+    const value = known.get(placeholder);
+    if (value === undefined) {
+      throw appError(
+        "VALIDATION",
+        `${placeholder} does not match any token stored in the config file. Reload and re-apply your edits.`
+      );
+    }
+    return value;
+  });
 }
 
 export const CONFIG_PATH = process.env.CONFIG_PATH ?? "/config.json";
@@ -107,13 +151,14 @@ export function validateConfigShape(parsed: unknown): parsed is DomainConfig {
   return Object.keys(parsed).every((key) => key.trim().length > 0);
 }
 
-/** Full view state for the config editor (contracts/api.md GET /api/config). */
+/** Full view state for the config editor (contracts/api.md GET /api/config), tokens masked. */
 export function readConfigState(): ConfigFileState {
-  const { exists, raw } = readConfigRaw();
+  const { exists, raw: diskRaw } = readConfigRaw();
   if (!exists) {
     return { path: CONFIG_PATH, exists: false, raw: null, parsed: null, parseError: null };
   }
-  const { parsed, error } = parseConfig(raw as string);
+  const raw = maskSecrets(diskRaw as string);
+  const { parsed, error } = parseConfig(raw);
   if (error || !validateConfigShape(parsed)) {
     return {
       path: CONFIG_PATH,
@@ -148,9 +193,11 @@ export const BACKUP_DIR = process.env.BACKUP_DIR ?? "/backups";
 
 /**
  * Validates, backs up and atomically replaces the config file
- * (contracts/api.md PUT /api/config). Throws AppError:
- * VALIDATION (bad JSON / wrong shape), NOT_FOUND (missing file),
- * CONFLICT (disk changed since load), INTERNAL (I/O failure).
+ * (contracts/api.md PUT /api/config). `raw` and `baseRaw` are masked texts
+ * as served by readConfigState; placeholders are restored from the tokens
+ * on disk. Throws AppError: VALIDATION (bad JSON / wrong shape / unknown
+ * placeholder), NOT_FOUND (missing file), CONFLICT (disk changed since
+ * load), INTERNAL (I/O failure).
  */
 export function saveConfig(
   raw: string,
@@ -172,12 +219,14 @@ export function saveConfig(
     throw appError("NOT_FOUND", `Config file ${CONFIG_PATH} does not exist.`);
   }
 
-  if (baseRaw !== null && baseRaw !== current) {
+  if (baseRaw !== null && baseRaw !== maskSecrets(current)) {
     throw appError(
       "CONFLICT",
       "The config file changed on disk since it was loaded. Reload and re-apply your edits."
     );
   }
+
+  const toWrite = JSON.parse(unmaskSecrets(raw, current)) as DomainConfig;
 
   let backupPath: string | null = null;
   try {
@@ -192,7 +241,7 @@ export function saveConfig(
   }
 
   try {
-    replaceConfigFile(JSON.stringify(parsed, null, 1));
+    replaceConfigFile(JSON.stringify(toWrite, null, 1));
   } catch (writeError) {
     throw appError(
       "INTERNAL",

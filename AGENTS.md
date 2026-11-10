@@ -42,7 +42,13 @@ killed after `CLI_TIMEOUT` seconds (default 120) in both modes.
   via the CLI — must take this lock.
 - Setup sessions (`src/lib/setup-session.ts`) are in-memory only (module-level Map, 15 min
   timeout, URL scraped from CLI stdout) — lost on process restart.
-- No authentication — README says only expose on a trusted network.
+- No authentication — README says only expose on a trusted network. `src/proxy.ts` (Next 16's
+  renamed middleware) rejects cross-site non-GET `/api/*` requests (`Sec-Fetch-Site`, else
+  `Origin` vs `Host`/`X-Forwarded-Host`); requests without those headers (curl) pass.
+- Tokens never leave the server: `GET /api/config` masks `access_token`/`refresh_token` as
+  `__SECRET_<sha256 prefix>__` (`config-store.ts` `maskSecrets`, regex on raw text so corrupt files
+  are masked too); `PUT` restores them from the tokens on disk and compares `baseRaw` against the
+  masked disk text. Never return raw config contents from a new endpoint.
 
 ## Development
 
