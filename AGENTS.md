@@ -4,8 +4,10 @@
 
 Docker image that keeps IONOS/1&1 dynamic DNS subdomains updated by running the upstream
 `domain-connect-dyndns` Python CLI on a schedule, plus an optional Next.js web UI to manage
-subdomains. No tests, no Python deps file, no typecheck script — verification is
-`docker build` at the root and `npm run lint` in `webui/`.
+subdomains. Verification: in `webui/` `npm run lint`, `npm test` (Vitest) and `npm run build`
+(includes the TypeScript check; plain `tsc --noEmit` fails on Next's generated `LayoutProps`),
+plus `docker build` at the root. `.github/workflows/ci.yml` runs all of it, and a container
+smoke test, on every PR and push to master.
 
 ## Two runtime modes (`docker-entrypoint.sh`)
 
@@ -33,7 +35,9 @@ killed after `CLI_TIMEOUT` seconds (default 120) in both modes.
   return errors through `src/lib/errors.ts` (`AppError` → code/HTTP mapping).
 - Update outcomes are parsed from CLI stdout text in `src/lib/dyndns.ts`
   ("DNS records successfully updated.", "All records up to date", ...) — brittle coupling to
-  the CLI's output; bumping the pip package may silently break it.
+  the CLI's output; bumping the pip package may silently break it. Fixtures in
+  `src/test/cli-output.ts` mirror 0.0.9's output (from its source): update them and
+  `dyndns-parse.test.ts` first when bumping the CLI.
 - Every config.json writer goes through one lock (`src/lib/config-lock.ts`, state on
   `globalThis`): the CLI reads the whole file, does network calls, then rewrites it, so any
   concurrent write is lost. Updates (`scheduler.ts`) fail fast with `CONFLICT`; editor save
@@ -53,7 +57,9 @@ killed after `CLI_TIMEOUT` seconds (default 120) in both modes.
 ## Development
 
 - `webui/`: `npm run dev` (note: `instrumentation.ts` starts the real scheduler in dev too,
-  and the CLI must be on PATH with a valid config), `npm run lint` (ESLint only), `npm run build`.
+  and the CLI must be on PATH with a valid config), `npm run lint` (ESLint only), `npm test`,
+  `npm run build`. Tests live next to the code (`*.test.ts`); modules read env (`CONFIG_PATH`,
+  `DYNDNS_CLI`, `CLI_TIMEOUT`) at load, so use `importWithEnv` from `src/test/helpers.ts`.
 - Docker: `docker build -t ionos-domain-connect .` — context is repo root; `.dockerignore`
   excludes `webui/node_modules` and `webui/.next`. Python deps are pinned in
   `requirements.txt` (`domain-connect-dyndns==0.0.9` because of the stdout parsing,

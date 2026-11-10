@@ -115,6 +115,9 @@ Inside the container the binaries are `domain-connect-dyndns` (Python) and
 
 - The web app lives in `webui/` (Next.js App Router + shadcn/ui + Tailwind
   v4). Build the image with `docker build -t ionos-domain-connect .`.
+- Checks: `npm run lint`, `npm test` (Vitest) and `npm run build` in
+  `webui/`. CI runs them, plus a Docker build and smoke test, on every pull
+  request and push to `master`.
 - Python dependencies are pinned in `requirements.txt` (the web UI parses
   the `domain-connect-dyndns` output, so bump it deliberately); npm
   dependencies are in `webui/package-lock.json`.
