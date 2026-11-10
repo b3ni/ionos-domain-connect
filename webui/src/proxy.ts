@@ -1,9 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { AUTH_CHALLENGE, authConfig, isAuthorized } from "@/lib/basic-auth";
 
 /**
- * CSRF guard for the API. The interface has no authentication, so without
- * this any website opened in a browser on the same network could drive the
- * API cross-site (e.g. a hidden form POST to http://<host>:3000/api/...).
+ * Runs before every request.
+ *
+ * 1. Optional HTTP Basic auth (`WEBUI_PASSWORD`, see lib/basic-auth.ts) for
+ *    every page, API route and asset. Without it the interface is open to
+ *    anyone who can reach the port.
+ * 2. CSRF guard for the API. Browsers resend Basic credentials (or none are
+ *    needed at all), so without this any website opened in a browser on the
+ *    same network could drive the API cross-site (e.g. a hidden form POST
+ *    to http://<host>:3000/api/...).
  *
  * State-changing requests are rejected when the browser says they come from
  * another site:
@@ -28,8 +35,29 @@ function forbidden(reason: string) {
   );
 }
 
+function unauthorized() {
+  return NextResponse.json(
+    {
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+        details: null,
+      },
+    },
+    { status: 401, headers: { "WWW-Authenticate": AUTH_CHALLENGE } }
+  );
+}
+
 export function proxy(request: NextRequest) {
-  if (SAFE_METHODS.has(request.method)) {
+  const auth = authConfig();
+  if (auth && !isAuthorized(request.headers.get("authorization"), auth)) {
+    return unauthorized();
+  }
+
+  if (
+    SAFE_METHODS.has(request.method) ||
+    !request.nextUrl.pathname.startsWith("/api/")
+  ) {
     return NextResponse.next();
   }
 
@@ -62,6 +90,4 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = {
-  matcher: "/api/:path*",
-};
+// No matcher: auth must cover every path, pages and static assets included.

@@ -31,6 +31,7 @@ services:
     environment:
       - ENABLE_WEBUI=true   # web interface; absent/false = headless updater only
       - INTERVAL_UPDATE=60  # seconds
+      - WEBUI_PASSWORD=change-me  # optional: require a login (user "admin")
     volumes:
       - ./config.json:/config.json
 ```
@@ -46,7 +47,7 @@ Open `http://<host>:3000`. From the web interface you can:
 
 The updater runs automatically every `INTERVAL_UPDATE` seconds (default 60).
 
-> **Note**: the interface has no authentication — only expose the port on a trusted network. Cross-site API requests are rejected (403); behind a reverse proxy, forward the original host (`Host` or `X-Forwarded-Host`).
+> **Note**: authentication is optional — set `WEBUI_PASSWORD` to protect the interface with HTTP Basic auth (use HTTPS if it is reachable from outside your network). Without it, only expose the port on a trusted network. Cross-site API requests are always rejected (403); behind a reverse proxy, forward the original host (`Host` or `X-Forwarded-Host`).
 
 ## Web on/off
 
@@ -70,6 +71,9 @@ Inside the container the binaries are `domain-connect-dyndns` (Python) and `node
 | `ENABLE_WEBUI`  | *(unset)*        | `true` starts the web UI; otherwise headless updater   |
 | `INTERVAL_UPDATE` | `60`           | Update interval in seconds                             |
 | `CLI_TIMEOUT`   | `120`            | Max seconds per updater run before it is stopped       |
+| `WEBUI_PASSWORD` | *(unset)*       | Enables HTTP Basic auth for the web UI                 |
+| `WEBUI_PASSWORD_FILE` | *(unset)*  | Read the password from a file (Docker secrets)         |
+| `WEBUI_USERNAME` | `admin`         | Username for the web UI login                          |
 | `CONFIG_PATH`   | `/config.json`   | Path to the IONOS config file                          |
 | `DYNDNS_CLI`    | `domain-connect-dyndns` | Override the CLI binary used by the web UI       |
 | `BACKUP_DIR`    | `/backups`       | Where backups are written when removing a domain       |
