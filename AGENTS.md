@@ -34,8 +34,12 @@ killed after `CLI_TIMEOUT` seconds (default 120) in both modes.
 - Update outcomes are parsed from CLI stdout text in `src/lib/dyndns.ts`
   ("DNS records successfully updated.", "All records up to date", ...) — brittle coupling to
   the CLI's output; bumping the pip package may silently break it.
-- Scheduled ticks and manual triggers share one lock (`src/lib/scheduler.ts` `runUpdateNow`) —
-  throws `CONFLICT` if an update is already running.
+- Every config.json writer goes through one lock (`src/lib/config-lock.ts`, state on
+  `globalThis`): the CLI reads the whole file, does network calls, then rewrites it, so any
+  concurrent write is lost. Updates (`scheduler.ts`) fail fast with `CONFLICT`; editor save
+  (`PUT /api/config`), remove and setup completion (`submitAccessCode`, held until the setup
+  CLI exits) wait up to `CONFIG_LOCK_WAIT_MS`. New code that writes the config — directly or
+  via the CLI — must take this lock.
 - Setup sessions (`src/lib/setup-session.ts`) are in-memory only (module-level Map, 15 min
   timeout, URL scraped from CLI stdout) — lost on process restart.
 - No authentication — README says only expose on a trusted network.

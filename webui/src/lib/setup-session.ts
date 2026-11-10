@@ -1,4 +1,7 @@
+import { acquireConfigLock, type Release } from "@/lib/config-lock";
 import {
+  CLI_TIMEOUT_SEC,
+  CONFIG_LOCK_WAIT_MS,
   cancelSetup,
   lastMeaningfulLine,
   startSetup,
@@ -20,6 +23,9 @@ export interface SetupSessionView {
 interface SessionInternal extends SetupSessionView {
   child: SetupChild;
   timeout: NodeJS.Timeout;
+  codeSubmitted: boolean;
+  /** Config lock held from code submission until the CLI exits. */
+  releaseLock: Release | null;
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
@@ -40,7 +46,13 @@ const fail = (session: SessionInternal, error: string): void => {
   session.state = "failed";
   session.error = error;
   clearTimeout(session.timeout);
+  // The config lock (if held) is released when the killed process exits.
   cancelSetup(session.child.proc);
+};
+
+const releaseLock = (session: SessionInternal): void => {
+  session.releaseLock?.();
+  session.releaseLock = null;
 };
 
 export function getSession(domain: string): SetupSessionView | null {
@@ -65,6 +77,8 @@ export function startSetupSession(domain: string): SetupSessionView {
     startedAt: new Date().toISOString(),
     error: null,
     child,
+    codeSubmitted: false,
+    releaseLock: null,
     timeout: setTimeout(
       () => fail(session, "Authorization timed out."),
       SESSION_TIMEOUT_MS
@@ -82,6 +96,7 @@ export function startSetupSession(domain: string): SetupSessionView {
 
   child.done
     .then((result) => {
+      releaseLock(session);
       if (session.state !== "awaiting_authorization") {
         return;
       }
@@ -102,10 +117,18 @@ export function startSetupSession(domain: string): SetupSessionView {
   return toView(session);
 }
 
-export function submitAccessCode(
+const notAwaiting = (domain: string) =>
+  appError("CONFLICT", `Setup for ${domain} is not awaiting an access code.`);
+
+/**
+ * Hands the access code to the setup CLI. Right after exchanging it the CLI
+ * rewrites config.json, so the config lock is taken first (waiting for a
+ * running update) and held until the CLI exits.
+ */
+export async function submitAccessCode(
   domain: string,
   code: string
-): SetupSessionView {
+): Promise<SetupSessionView> {
   const session = sessions.get(domain);
   if (!session) {
     throw appError(
@@ -114,11 +137,42 @@ export function submitAccessCode(
     );
   }
   if (session.state !== "awaiting_authorization") {
+    throw notAwaiting(domain);
+  }
+  if (session.codeSubmitted) {
     throw appError(
       "CONFLICT",
-      `Setup for ${domain} is not awaiting an access code.`
+      `An access code for ${domain} was already submitted.`
     );
   }
+  session.codeSubmitted = true;
+
+  let release: Release;
+  try {
+    release = await acquireConfigLock(
+      `finishing setup for ${domain}`,
+      CONFIG_LOCK_WAIT_MS
+    );
+  } catch (error) {
+    session.codeSubmitted = false;
+    throw error;
+  }
+  // The session may have timed out or failed while waiting for the lock.
+  if (session.state !== "awaiting_authorization") {
+    release();
+    throw notAwaiting(domain);
+  }
+  session.releaseLock = release;
+  // Bound how long the lock can be held by a CLI stuck on the provider.
+  clearTimeout(session.timeout);
+  session.timeout = setTimeout(
+    () =>
+      fail(
+        session,
+        `Setup did not finish within ${CLI_TIMEOUT_SEC}s after the access code was submitted.`
+      ),
+    CLI_TIMEOUT_SEC * 1000
+  );
   submitSetupCode(session.child.proc, code);
   return toView(session);
 }

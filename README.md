@@ -49,6 +49,11 @@ Open `http://<host>:3000`. From the web interface you can:
 - refresh a single subdomain: each row has its own update button that runs
   the updater for that domain only (global and per-domain updates share one
   lock, so concurrent runs are rejected with a clear message)
+- every change to `config.json` made from the interface (updates, removing
+  or adding a domain, saving the config editor) is serialized: removing a
+  domain, finishing a setup or saving the config waits for a running update
+  instead of being silently overwritten by it. Changes made with the CLI
+  via `docker exec` at the same time are not coordinated
 - when a domain fails with a stale provider session ("Failed to get async
   token ... NOTFOUND_SESSION"), the row shows a "Run setup again for this
   domain." action that re-authorizes the domain in the interface — the
