@@ -1,4 +1,6 @@
+import { withConfigLock } from "@/lib/config-lock";
 import { CONFIG_PATH, readConfigState, saveConfig } from "@/lib/config-store";
+import { CONFIG_LOCK_WAIT_MS } from "@/lib/dyndns";
 import { appError, errorResponse } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +37,14 @@ export async function PUT(request: Request) {
     }
 
     const { raw, baseRaw } = body as { raw: string; baseRaw: string | null };
-    const { backupPath } = saveConfig(raw, baseRaw);
+    // Waits for a running update: the CLI would otherwise overwrite this
+    // save when it rewrites the file. If the update changed the file, the
+    // baseRaw check then reports a conflict instead of losing either side.
+    const { backupPath } = await withConfigLock(
+      "saving the configuration",
+      CONFIG_LOCK_WAIT_MS,
+      () => saveConfig(raw, baseRaw)
+    );
 
     return Response.json({
       path: CONFIG_PATH,

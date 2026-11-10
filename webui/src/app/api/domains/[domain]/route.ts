@@ -1,6 +1,7 @@
 import { appError, errorResponse } from "@/lib/errors";
+import { withConfigLock } from "@/lib/config-lock";
 import { isManaged } from "@/lib/domains";
-import { removeDomain } from "@/lib/dyndns";
+import { CONFIG_LOCK_WAIT_MS, removeDomain } from "@/lib/dyndns";
 import { domainParamSchema } from "@/lib/validation";
 
 export async function DELETE(
@@ -14,14 +15,21 @@ export async function DELETE(
       throw appError("VALIDATION", "Invalid domain in path");
     }
 
-    if (!isManaged(parsed.data.domain)) {
-      throw appError(
-        "NOT_FOUND",
-        `${parsed.data.domain} is not managed.`
-      );
-    }
-
-    const result = await removeDomain(parsed.data.domain);
+    // Under the config lock: a concurrent update would otherwise rewrite
+    // the file from its stale copy and bring the domain back.
+    const result = await withConfigLock(
+      `removing ${parsed.data.domain}`,
+      CONFIG_LOCK_WAIT_MS,
+      () => {
+        if (!isManaged(parsed.data.domain)) {
+          throw appError(
+            "NOT_FOUND",
+            `${parsed.data.domain} is not managed.`
+          );
+        }
+        return removeDomain(parsed.data.domain);
+      }
+    );
     const lastLine = result.stdout
       .split("\n")
       .map((l) => l.trim())

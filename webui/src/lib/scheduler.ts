@@ -1,9 +1,9 @@
+import { tryWithConfigLock } from "@/lib/config-lock";
 import { runUpdateAll, runUpdateOne, type UpdateSummary } from "@/lib/dyndns";
-import { AppError, appError } from "@/lib/errors";
+import { AppError } from "@/lib/errors";
 
 let timer: NodeJS.Timeout | null = null;
 let started = false;
-let running = false;
 
 export function startScheduler(): void {
   if (started) {
@@ -16,7 +16,7 @@ export function startScheduler(): void {
     runUpdateNow().catch((error: unknown) => {
       if (error instanceof AppError && error.code === "CONFLICT") {
         console.log(
-          `[${new Date().toISOString()}] Scheduled update skipped: an update is already running`
+          `[${new Date().toISOString()}] Scheduled update skipped: ${error.message}`
         );
         return;
       }
@@ -37,29 +37,24 @@ export function stopScheduler(): void {
 }
 
 /**
- * Runs an update under the single shared lock: scheduled ticks, global
- * and per-domain manual triggers can never run concurrently.
+ * Runs an update under the shared config lock (`config-lock.ts`): updates
+ * never overlap each other nor any other config write, and fail fast with
+ * CONFLICT when the lock is taken.
  */
-async function withLock<T>(label: string, fn: () => Promise<T>): Promise<T> {
-  if (running) {
-    throw appError("CONFLICT", "An update is already running.");
-  }
-  running = true;
-  const ts = new Date().toISOString();
-  try {
-    console.log(`[${ts}] ${label}`);
+function withUpdateLock<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  return tryWithConfigLock(label, async () => {
+    const ts = new Date().toISOString();
+    console.log(`[${ts}] ${label} ...`);
     const result = await fn();
     console.log(`[${ts}] Update finished`);
     return result;
-  } finally {
-    running = false;
-  }
+  });
 }
 
 export function runUpdateNow(): Promise<UpdateSummary> {
-  return withLock("Updating all domains ...", runUpdateAll);
+  return withUpdateLock("updating all domains", runUpdateAll);
 }
 
 export function runUpdateOneNow(domain: string): Promise<UpdateSummary> {
-  return withLock(`Updating ${domain} ...`, () => runUpdateOne(domain));
+  return withUpdateLock(`updating ${domain}`, () => runUpdateOne(domain));
 }

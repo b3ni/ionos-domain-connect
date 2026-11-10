@@ -19,11 +19,17 @@ export interface CliResult {
 }
 
 /** Max seconds a non-interactive CLI run may take before it is killed. */
-const CLI_TIMEOUT_SEC = (() => {
+export const CLI_TIMEOUT_SEC = (() => {
   const value = Number(process.env.CLI_TIMEOUT ?? "120");
   return Number.isFinite(value) && value > 0 ? value : 120;
 })();
 const KILL_GRACE_MS = 5000;
+
+/**
+ * How long a user-initiated config write waits for the config lock: long
+ * enough to outlast any update, which is bounded by the CLI timeout.
+ */
+export const CONFIG_LOCK_WAIT_MS = CLI_TIMEOUT_SEC * 1000 + KILL_GRACE_MS + 5000;
 
 function runCli(args: string[]): Promise<CliResult> {
   return new Promise((resolve, reject) => {
@@ -342,4 +348,14 @@ export function cancelSetup(proc: ChildProcess): void {
   } catch {
     // already gone
   }
+  // Its exit releases the config lock: make sure it really exits.
+  setTimeout(() => {
+    if (proc.exitCode === null && proc.signalCode === null) {
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+  }, KILL_GRACE_MS).unref();
 }

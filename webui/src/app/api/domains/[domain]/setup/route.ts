@@ -65,7 +65,7 @@ export async function POST(
       if (!codeParsed.success) {
         throw appError("VALIDATION", "Invalid access code");
       }
-      submitAccessCode(parsed.data.domain, codeParsed.data.code);
+      await submitAccessCode(parsed.data.domain, codeParsed.data.code);
     } else {
       startSetupSession(parsed.data.domain);
     }
